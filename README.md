@@ -8,7 +8,7 @@ Tecnologias
 
 - Node.js
 - TypeScript
-- Fastify ou Express (confirmar o framework utilizado)
+- Express 
 - PostgreSQL
 - SQL
 
