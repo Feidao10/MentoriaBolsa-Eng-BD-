@@ -1,133 +1,148 @@
-//Área do mentor para criar ofertas e aceitar pedidos
 // Ficheiro: src/pages/painelMentor.tsx
+// SESSÃO 1 DE 2 — CONFIGURAÇÕES E POLÍTICAS DE DADOS COMUNITÁRIOS
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { type solicitacaoMentoria } from '../types';
+import { Footer } from '../components/Footer';
 
-// Dados fictícios alinhados com o contrato das Páginas 1 e 2 do PDF
+// Contrato de dados limpo de amarras académicas (Plataforma Aberta)
 const MOCK_SOLICITACOES_INICIAIS: solicitacaoMentoria[] = [
   {
     identificador: "pedido-1",
-    candidatoIdentificador: "estudante-uuid-1", // Simula o aluno que enviou
-    mentoriaIdentificador: "mentor-1",
-    mensagem: "precisando Garimpo",
-    estadoSolicitacao: 'pendente', // Estado inicial estrito
+    candidatoIdentificador: "membro-comunidade-1", 
+    mentoriaIdentificador: "mentoria-1",
+    mensagem: "Gostaria de obter apoio prático no desenho de arquiteturas de software reais e engenharia de requisitos.",
+    estadoSolicitacao: 'pendente',
     dataCriacao: "2026-10-22",
     dataAtualizacao: "2026-10-22"
   },
   {
     identificador: "pedido-2",
-    candidatoIdentificador: "estudante-uuid-2",
-    mentoriaIdentificador: "mentor-1",
-    mensagem: "Preciso de ajuda urgente para estruturar as rotas no frontend e a arquitetura MVC no backend.",
+    candidatoIdentificador: "membro-comunidade-2",
+    mentoriaIdentificador: "mentoria-1",
+    mensagem: "Preciso de ajuda urgente para estruturar as rotas no meu ecossistema frontend e compreender a fundo a arquitetura MVC no backend.",
     estadoSolicitacao: 'pendente',
     dataCriacao: "2026-10-22",
     dataAtualizacao: "2026-10-22"
   }
 ];
-
+// SESSÃO 2 DE 2 — LOGICA DE DECISÃO E MAQUETIZAÇÃO INTERFICIAL
 export function PainelMentor() {
   const navigate = useNavigate();
   const [solicitacoes, setSolicitacoes] = useState<solicitacaoMentoria[]>(MOCK_SOLICITACOES_INICIAIS);
 
-  // Função para simular a decisão do mentor (Muda o estado estrito na hora)
+  // Função reativa que simula a tomada de decisão do mentor na rede aberta
   const decidirPedido = (id: string, novoEstado: 'aceite' | 'recusada') => {
     setSolicitacoes(prev => 
       prev.map(pedido => 
         pedido.identificador === id 
-          ? { ...pedido, estadoSolicitacao: novoEstado, dataAtualizacao: "2026-10-22" }
+          ? { ...pedido, estadoSolicitacao: novoEstado, dataAtualizacao: new Date().toISOString().split('T')[0] }
           : pedido
       )
     );
     
-    // MVP: No Dia 3, este console.log será substituído por um axios.put() para atualizar a BD
-    console.log(`Pedido ${id} atualizado para o estado: ${novoEstado}`);
+    // MVP Dia 3: Este log será mapeado para uma chamada assíncrona real (api.patch ou api.put)
+    console.log(`[Comunidade] Pedido ${id} atualizado para o estado: ${novoEstado}`);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Cabeçalho do Painel */}
-      <header className="bg-white border-b border-gray-200 p-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-between antialiased">
+      
+      {/* CABEÇALHO DO PAINEL */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 h-16 flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Painel de Controlo do Mentor</h1>
-            <p className="text-xs text-gray-500">Gestão de aulas Académicas</p>
+            <h1 className="text-md font-bold text-gray-900 tracking-tight">Mentor</h1>
+            <p className="text-[10px] text-gray-500 font-medium">Gestão de Propostas e Mentoria Livre</p>
           </div>
           <button 
             onClick={() => navigate('/')}
-            className="text-sm font-semibold text-red-600 hover:underline"
+            className="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors"
           >
             Terminar Sessão
           </button>
         </div>
       </header>
 
-      {/* Área de Conteúdo */}
-      <main className="max-w-5xl mx-auto p-6 w-full flex-1">
+      {/* ÁREA DE CONTEÚDO CENTRAL */}
+      <main className="max-w-5xl w-full mx-auto px-4 py-8 flex-grow">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-bold text-gray-800">Solicitações de Acompanhamento Recebidas</h2>
-          <span className="bg-blue-100 text-[#0e89b9e7] text-xs font-bold px-2.5 py-1 rounded-full">
+          <h2 className="text-base font-bold text-gray-800 tracking-tight">Propostas de Acompanhamento Submetidas</h2>
+          <span className=" text-[#0e89b9e7] text-xs font-bold px-3 py-1 rounded-full shadow-sm">
             {solicitacoes.filter(p => p.estadoSolicitacao === 'pendente').length} Pendentes
           </span>
         </div>
 
+        {/* LISTAGEM REATIVA DE PEDIDOS */}
         <div className="space-y-4">
-          {solicitacoes.map((pedido) => (
-            <div key={pedido.identificador} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <span className="text-xs font-mono text-gray-400 block mb-1">
-                    ID Estudante: {pedido.candidatoIdentificador}
-                  </span>
-                  <span className="text-xs text-gray-500">Recebido em: {pedido.dataCriacao}</span>
-                </div>
-
-                {/* Badges Dinâmicas de Estado Estrito */}
-                <div>
-                  {pedido.estadoSolicitacao === 'pendente' && (
-                    <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-3 py-1 rounded-lg">
-                      Pendente
-                    </span>
-                  )}
-                  {pedido.estadoSolicitacao === 'aceite' && (
-                    <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-lg">
-                      Aceite
-                    </span>
-                  )}
-                  {pedido.estadoSolicitacao === 'recusada' && (
-                    <span className="bg-red-100 text-red-800 text-xs font-bold px-3 py-1 rounded-lg">
-                      Recusada
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Mensagem do Estudante */}
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 text-gray-700 text-sm mb-4 italic">
-                "{pedido.mensagem}"
-              </div>
-
-              {/* Ações de Engenharia (Apenas aparecem se estiver pendente) */}
-              {pedido.estadoSolicitacao === 'pendente' && (
-                <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
-                  <button
-                    onClick={() => decidirPedido(pedido.identificador, 'recusada')}
-                    className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 transition"
-                  >
-                    Recusar Pedido
-                  </button>
-                  <button
-                    onClick={() => decidirPedido(pedido.identificador, 'aceite')}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition"
-                  >
-                    Aceitar Mentoria
-                  </button>
-                </div>
-              )}
+          {solicitacoes.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500 text-sm">
+              Nenhuma proposta recebida até ao momento.
             </div>
-          ))}
+          ) : (
+            solicitacoes.map((pedido) => (
+              <div key={pedido.identificador} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                <div className="flex justify-between items-start mb-4 gap-4">
+                  <div>
+                    <span className="text-xs font-mono text-gray-400 block mb-0.5">
+                      Identificador Candidato: <strong className="text-gray-600 font-semibold">{pedido.candidatoIdentificador}</strong>
+                    </span>
+                    <span className="text-[11px] text-gray-400 font-medium">Submetido em: {pedido.dataCriacao}</span>
+                  </div>
+
+                  {/* Badges de Estado Comunitário */}
+                  <div>
+                    {pedido.estadoSolicitacao === 'pendente' && (
+                      <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Pendente
+                      </span>
+                    )}
+                    {pedido.estadoSolicitacao === 'aceite' && (
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Aceite
+                      </span>
+                    )}
+                    {pedido.estadoSolicitacao === 'recusada' && (
+                      <span className="bg-red-50 text-red-700 border border-red-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Recusada
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mensagem do Candidato */}
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-gray-600 text-sm mb-4 leading-relaxed italic">
+                  "{pedido.mensagem}"
+                </div>
+
+                {/* Ações (Disponíveis apenas se o estado for estritamente pendente) */}
+                {pedido.estadoSolicitacao === 'pendente' && (
+                  <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => decidirPedido(pedido.identificador, 'recusada')}
+                      className="px-4 py-2 border border-red-200 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition-all active:scale-95"
+                    >
+                      Recusar Proposta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => decidirPedido(pedido.identificador, 'aceite')}
+                      className="px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-700 transition-all shadow-sm active:scale-95"
+                    >
+                      Aprovar Mentoria
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </main>
+
+      {/* RODAPÉ GLOBAL REUTILIZÁVEL */}
+      <Footer />
+      
     </div>
   );
 }

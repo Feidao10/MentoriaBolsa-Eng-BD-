@@ -10,7 +10,7 @@ export function Login() {
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [email, setEmail] = useState('');
   const [palavraPasseHash, setPalavraPasseHash] = useState('');
-  const [tipoUtilizador, setTipoUtilizador] = useState<'candidato' | 'mentor' | 'administrador'>('candidato');
+  const [tipoUtilizador, setTipoUtilizador] = useState<'candidato' | 'mentor'>('candidato');
 
   const submeterFormulario = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,9 +24,7 @@ export function Login() {
     // Redireciona de acordo com o tipo estrito
     if (tipoUtilizador === 'mentor') {
       navigate('/mentor/dashboard');
-    } else if (tipoUtilizador === 'administrador') {
-      navigate('/admin/dashboard');
-    } else {
+    }else {
       navigate('/candidato/dashboard');
     }
   };
@@ -84,11 +82,10 @@ export function Login() {
                 className="mt-1 w-full p-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#0e89b9e7] outline-none"
                 value={tipoUtilizador}
                 // CORREÇÃO DO ERRO DO ESLINT: O valor é mapeado estritamente para o literal correto
-                onChange={(e) => setTipoUtilizador(e.target.value as 'candidato' | 'mentor' | 'administrador')}
+                onChange={(e) => setTipoUtilizador(e.target.value as 'candidato' | 'mentor')}
               >
                 <option value="candidato">Candidato (Estudante)</option>
                 <option value="mentor">Mentor (Tutor/Instituição)</option>
-                <option value="administrador">Administrador</option>
               </select>
             </div>
           )}
