@@ -1,0 +1,22 @@
+
+dist
+
+# --- Ficheiros de ambiente (Segurança) ---
+.env
+**/env/
+**/.env
+
+# --- Dependências (Evitar pastas gigantescas como node_modules) ---
+node_modules/
+**/node_modules/
+
+# --- Compilações e Builds ---
+dist/
+build/
+.next/
+
+# --- Python (se usares no backend) ---
+pycache/
+*.py[cod]
+venv/
+env/
