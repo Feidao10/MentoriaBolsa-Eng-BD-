@@ -9,6 +9,7 @@ import { FeedBolsas } from './pages/feedBolsas';
 import { Login } from './pages/login';
 import { PainelCandidato } from './pages/painelCandidato';
 import { PainelMentor } from './pages/painelMentor';
+import { CriarMentoria } from './pages/CriarMentoria';
 
 import { RotaProtegida } from './components/RotaProtegida';
 
@@ -53,6 +54,15 @@ export function App() {
             </RotaProtegida>
           }
         />
+
+        <Route
+  path="/mentor/criar-mentoria"
+  element={
+    <RotaProtegida tipoPermitido="mentor">
+      <CriarMentoria />
+    </RotaProtegida>
+  }
+/>
 
         {/* Painel do administrador */}
         <Route

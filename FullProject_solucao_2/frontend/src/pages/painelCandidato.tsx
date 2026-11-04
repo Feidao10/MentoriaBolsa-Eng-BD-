@@ -2,7 +2,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Footer } from '../components/Footer';
-import { listarMentorias, type MentoriaApi } from '../servicos/mentorias';
+import {
+  listarMentorias,
+  listarMinhasSolicitacoes,
+  type MentoriaApi,
+  type SolicitacaoMentoriaApi,
+} from '../servicos/mentorias';
 import { api } from '../servicos/api';
 import {
   terminarSessao,
@@ -11,26 +16,33 @@ import {
 
 export function PainelCandidato() {
   const navigate = useNavigate();
-  const utilizador: UtilizadorApi | null = (() => {
-  try {
-    const dados = localStorage.getItem('utilizador');
-    return dados ? JSON.parse(dados) as UtilizadorApi : null;
-  } catch {
-    return null;
-  }
-})();
 
-const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
+  const utilizador: UtilizadorApi | null = (() => {
+    try {
+      const dados = localStorage.getItem('utilizador');
+      return dados ? JSON.parse(dados) as UtilizadorApi : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
 
   const [mentorias, setMentorias] = useState<MentoriaApi[]>([]);
   const [mentoriaSelecionada, setMentoriaSelecionada] =
     useState<MentoriaApi | null>(null);
+
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [sucessoMensagem, setSucessoMensagem] = useState('');
 
+  const [solicitacoes, setSolicitacoes] = useState<SolicitacaoMentoriaApi[]>([]);
+  const [carregandoSolicitacoes, setCarregandoSolicitacoes] = useState(true);
+  const [erroSolicitacoes, setErroSolicitacoes] = useState('');
+
+  // Carrega as mentorias disponíveis.
   useEffect(() => {
     async function carregarMentorias() {
       try {
@@ -47,11 +59,34 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
     void carregarMentorias();
   }, []);
 
+  // Carrega as solicitações do candidato autenticado.
+  async function carregarSolicitacoes() {
+    setCarregandoSolicitacoes(true);
+    setErroSolicitacoes('');
+
+    try {
+      const dados = await listarMinhasSolicitacoes();
+      setSolicitacoes(dados);
+    } catch (error) {
+      console.error('Erro ao carregar solicitações:', error);
+      setErroSolicitacoes(
+        'Não foi possível carregar as suas solicitações.'
+      );
+    } finally {
+      setCarregandoSolicitacoes(false);
+    }
+  }
+
+  useEffect(() => {
+    void carregarSolicitacoes();
+  }, []);
+
+  // Envia uma solicitação de mentoria.
   async function enviarSolicitacao(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!mentoriaSelecionada) {
-      setErro('Selecione uma mentoria antes de enviar a mensagem.');
+      setErro('Selecione uma mentoria antes de enviar a solicitação.');
       return;
     }
 
@@ -62,18 +97,90 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
     try {
       await api.post('/solicitacoesMentoria', {
         mentoriaId: mentoriaSelecionada.id,
-        mensagem: mensagem.trim(),
       });
 
       setSucessoMensagem('A sua solicitação foi enviada com sucesso!');
       setMensagem('');
       setMentoriaSelecionada(null);
+
+      // Atualiza o histórico depois da criação.
+      await carregarSolicitacoes();
     } catch (error) {
       console.error('Erro ao enviar solicitação:', error);
-      setErro('Não foi possível enviar a solicitação. Tente novamente.');
+      setErro(
+        'Não foi possível enviar a solicitação. Verifique se já existe um pedido para esta mentoria.'
+      );
     } finally {
       setEnviando(false);
     }
+  }
+
+  // Apresenta os estados da solicitação.
+  function obterEstadoSolicitacao(estado: string) {
+    switch (estado) {
+      case 'pendente':
+        return {
+          texto: 'Pendente',
+          classe: 'bg-amber-50 text-amber-700 border-amber-200',
+        };
+
+      case 'aceite':
+        return {
+          texto: 'Aceite',
+          classe: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        };
+
+      case 'recusada':
+        return {
+          texto: 'Recusada',
+          classe: 'bg-red-50 text-red-700 border-red-200',
+        };
+
+      case 'cancelada':
+        return {
+          texto: 'Cancelada',
+          classe: 'bg-slate-100 text-slate-600 border-slate-200',
+        };
+
+      default:
+        return {
+          texto: estado,
+          classe: 'bg-slate-100 text-slate-600 border-slate-200',
+        };
+    }
+  }
+
+  // Apresenta os estados do pagamento.
+  function obterEstadoPagamento(estado: string | null) {
+    switch (estado) {
+      case 'pendente':
+        return 'Pendente';
+
+      case 'confirmado':
+        return 'Confirmado';
+
+      case 'cancelado':
+        return 'Cancelado';
+
+      default:
+        return 'Não disponível';
+    }
+  }
+
+  function formatarData(data: string) {
+    const dataFormatada = new Date(data);
+
+    if (Number.isNaN(dataFormatada.getTime())) {
+      return 'Data não disponível';
+    }
+
+    return dataFormatada.toLocaleDateString('pt-PT', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   return (
@@ -85,11 +192,10 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
 
           <a href="/" className="flex items-center gap-3">
             <img
-    src="/images/MentoriaBolsas_ Learn, Achieve, Realize.png"
-    alt="MentoriaBolsas — Aprenda. Conquiste. Realize."
-    className="h-14 w-auto max-w-[220px] object-contain"
-  />
-            
+              src="/images/MentoriaBolsas_ Learn, Achieve, Realize.png"
+              alt="MentoriaBolsas — Aprenda. Conquiste. Realize."
+              className="h-14 w-auto max-w-[220px] object-contain"
+            />
           </a>
 
           <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-slate-600">
@@ -102,32 +208,30 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
             <a href="/#bolsas" className="hover:text-[#0E7490] transition">
               Bolsas
             </a>
-            <a href="/#mentorias" className="hover:text-[#0E7490] transition">
+            <a href="#" className="hover:text-[#0E7490] transition">
               Mentorias
             </a>
           </nav>
 
           <div className="flex items-center gap-3">
             <div className="flex flex-col items-end gap-2">
-  <button
-    type="button"
-    onClick={() => {
-      terminarSessao();
-      navigate('/autenticacao', { replace: true });
-    }}
-    className="text-sm font-semibold text-red-600 border border-red-200 rounded-lg px-4 py-2 hover:bg-red-50 transition"
-  >
-    Terminar Sessão
-  </button>
+              <button
+                type="button"
+                onClick={() => {
+                  terminarSessao();
+                  navigate('/autenticacao', { replace: true });
+                }}
+                className="text-sm font-semibold text-red-600 border-red-200 rounded-lg px-4 py-2 transition"
+              >
+                Terminar Sessão
+              </button>
 
-  <div className="  border-cyan-200 rounded-lg px-4 py-2">
-    
-
-    <span className="block text-sm font-bold text-[#164E63]">
-      {nomeCandidato}
-    </span>
-  </div>
-</div>
+              <div className="border-cyan-200 rounded-lg px-4 py-2">
+                <span className="block text-sm font-bold text-[#164E63]">
+                  {nomeCandidato}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -137,9 +241,6 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
 
         {/* FAIXA DE ORIENTAÇÃO */}
         <section className="mb-8 rounded-2xl bg-[#164E63] text-white px-6 py-7 md:px-9 md:py-8 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">
-            Área do Candidato
-          </span>
 
           <h1 className="mt-2 text-2xl md:text-3xl font-bold">
             Encontre a mentoria certa para si
@@ -147,7 +248,7 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
 
           <p className="mt-2 max-w-2xl text-sm md:text-base leading-relaxed text-cyan-50">
             Explore as mentorias disponíveis, escolha o mentor que melhor
-            corresponde aos seus objetivos e envie uma mensagem para iniciar
+            corresponde aos seus objetivos e envie uma solicitação para iniciar
             o seu acompanhamento.
           </p>
         </section>
@@ -160,9 +261,6 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
 
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-[#0E7490]">
-                  Oportunidades de acompanhamento
-                </span>
                 <h2 className="text-xl font-bold text-slate-800 mt-1">
                   Lista de mentorias disponíveis
                 </h2>
@@ -215,6 +313,7 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
                         <h3 className="font-bold text-lg text-slate-800">
                           {item.titulo}
                         </h3>
+
                         <span className="inline-flex mt-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full">
                           Mentoria disponível
                         </span>
@@ -233,7 +332,9 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
                       <span className={`text-xs font-bold ${
                         selecionada ? 'text-[#0E7490]' : 'text-slate-500'
                       }`}>
-                        {selecionada ? '✓ Mentoria selecionada' : 'Selecionar esta mentoria'}
+                        {selecionada
+                          ? '✓ Mentoria selecionada'
+                          : 'Selecionar esta mentoria'}
                       </span>
 
                       <span className="text-sm font-semibold text-[#0E7490]">
@@ -246,20 +347,21 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
             </div>
           </section>
 
-          {/* ÁREA DE MENSAGEM */}
+          {/* ÁREA DE SOLICITAÇÃO */}
           <aside className="lg:col-span-2">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sticky top-5">
 
               <div className="mb-5">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#0E7490]">
-                  Comunicação
+                  Solicitação
                 </span>
+
                 <h2 className="text-xl font-bold text-slate-800 mt-1">
-                  Enviar mensagem
+                  Solicitar mentoria
                 </h2>
+
                 <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-                  Escreva uma apresentação ou explique as suas dúvidas ao
-                  mentor escolhido.
+                  Escolha uma mentoria e envie o seu pedido ao mentor responsável.
                 </p>
               </div>
 
@@ -284,8 +386,9 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
               {mentoriaSelecionada ? (
                 <div className="mb-5 p-4 bg-cyan-50 border border-cyan-100 rounded-xl">
                   <span className="text-xs font-semibold text-slate-500">
-                    Mentor escolhido
+                    Mentoria escolhida
                   </span>
+
                   <p className="font-bold text-[#164E63] mt-1">
                     {mentoriaSelecionada.titulo}
                   </p>
@@ -295,9 +398,9 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
                   <p className="text-sm font-semibold text-amber-800">
                     Nenhuma mentoria selecionada
                   </p>
+
                   <p className="text-xs text-amber-700 mt-1 leading-relaxed">
                     Primeiro, escolha uma das mentorias disponíveis na lista.
-                    Depois poderá escrever e enviar a sua mensagem.
                   </p>
                 </div>
               )}
@@ -322,7 +425,7 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
                     placeholder={
                       mentoriaSelecionada
                         ? 'Apresente-se ao mentor e explique as suas necessidades, dúvidas ou objetivos...'
-                        : 'Selecione primeiro uma mentoria para escrever a sua mensagem.'
+                        : 'Selecione primeiro uma mentoria.'
                     }
                     value={mensagem}
                     onChange={(e) => setMensagem(e.target.value)}
@@ -343,16 +446,141 @@ const nomeCandidato = utilizador?.nomeCompleto || 'Candidato';
                   }
                   className="w-full bg-[#0E7490] text-white py-3 px-4 rounded-xl font-semibold text-sm hover:bg-[#155E75] transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {enviando ? 'A enviar mensagem...' : 'Enviar ao mentor'}
+                  {enviando ? 'A enviar solicitação...' : 'Enviar solicitação'}
                 </button>
 
                 <p className="text-xs text-center text-slate-400 leading-relaxed">
-                  A mensagem será associada à mentoria que selecionou.
+                  O pedido será associado à mentoria selecionada. A mensagem
+                  escrita ainda não é guardada pelo sistema.
                 </p>
               </form>
             </div>
           </aside>
         </div>
+
+        {/* HISTÓRICO DE SOLICITAÇÕES */}
+        <section className="mt-12">
+
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-[#0E7490]">
+                Acompanhamento
+              </span>
+
+              <h2 className="text-xl md:text-2xl font-bold text-slate-800 mt-1">
+                Minhas solicitações
+              </h2>
+
+              <p className="text-sm text-slate-500 mt-1">
+                Acompanhe o estado dos seus pedidos de mentoria.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void carregarSolicitacoes()}
+              disabled={carregandoSolicitacoes}
+              className="text-sm font-semibold text-[#0E7490] border border-cyan-200 rounded-lg px-4 py-2 hover:bg-cyan-50 transition disabled:opacity-50"
+            >
+              {carregandoSolicitacoes ? 'A atualizar...' : 'Atualizar histórico'}
+            </button>
+          </div>
+
+          {carregandoSolicitacoes && (
+            <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
+              A carregar as suas solicitações...
+            </div>
+          )}
+
+          {!carregandoSolicitacoes && erroSolicitacoes && (
+            <div
+              role="alert"
+              className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-5 text-sm"
+            >
+              {erroSolicitacoes}
+            </div>
+          )}
+
+          {!carregandoSolicitacoes &&
+            !erroSolicitacoes &&
+            solicitacoes.length === 0 && (
+              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
+                <h3 className="font-semibold text-slate-700">
+                  Ainda não enviou nenhuma solicitação.
+                </h3>
+
+                <p className="text-sm text-slate-500 mt-2">
+                  Quando solicitar uma mentoria, poderá acompanhar aqui o
+                  respetivo estado.
+                </p>
+              </div>
+            )}
+
+          {!carregandoSolicitacoes &&
+            !erroSolicitacoes &&
+            solicitacoes.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {solicitacoes.map((solicitacao) => {
+                  const estado = obterEstadoSolicitacao(solicitacao.estado);
+
+                  return (
+                    <article
+                      key={solicitacao.id}
+                      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
+                    >
+                      <div className="flex justify-between items-start gap-3">
+                        <div>
+                          <span className="text-xs text-slate-400 font-semibold">
+                            Solicitação #{solicitacao.id}
+                          </span>
+
+                          <h3 className="font-bold text-lg text-slate-800 mt-1">
+                            {solicitacao.mentoriaTitulo}
+                          </h3>
+                        </div>
+
+                        <span className={`shrink-0 text-xs font-bold border rounded-full px-3 py-1.5 ${estado.classe}`}>
+                          {estado.texto}
+                        </span>
+                      </div>
+
+                      <div className="mt-5 space-y-3 text-sm">
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Mentor</span>
+                          <span className="font-semibold text-slate-700 text-right">
+                            {solicitacao.mentorNome}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Data do pedido</span>
+                          <span className="font-medium text-slate-700 text-right">
+                            {formatarData(solicitacao.dataCriacao)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Valor</span>
+                          <span className="font-semibold text-slate-700">
+                            {solicitacao.valorPagamento !== null
+                              ? `${solicitacao.valorPagamento} Kz`
+                              : 'Não disponível'}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Pagamento</span>
+                          <span className="font-semibold text-slate-700">
+                            {obterEstadoPagamento(solicitacao.estadoPagamento)}
+                          </span>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+        </section>
       </main>
 
       <Footer />

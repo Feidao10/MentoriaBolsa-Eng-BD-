@@ -260,10 +260,7 @@ export function FeedBolsas() {
             id="sobre"
             className="scroll-mt-28 py-10 text-center sm:py-14"
           >
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#0e88b9]">
-              Sobre a plataforma
-            </span>
-
+            
             <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Oportunidades para construir o teu futuro
             </h2>
@@ -284,9 +281,7 @@ export function FeedBolsas() {
           >
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#0e88b9]">
-                  Oportunidades disponíveis
-                </span>
+                
 
                 <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
                   Bolsas de estudo

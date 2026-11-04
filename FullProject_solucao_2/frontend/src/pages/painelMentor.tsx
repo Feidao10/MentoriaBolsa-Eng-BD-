@@ -1,35 +1,26 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { type solicitacaoMentoria } from '../types';
 import { Footer } from '../components/Footer';
+import { api } from '../servicos/api';
 import {
   terminarSessao,
   type UtilizadorApi,
 } from '../servicos/autenticacao';
 
-// Dados fictícios para manter o funcionamento actual do painel
-const MOCK_SOLICITACOES_INICIAIS: solicitacaoMentoria[] = [
-  {
-    identificador: 'pedido-1',
-    candidatoIdentificador: 'estudante-uuid-1',
-    mentoriaIdentificador: 'mentor-1',
-    mensagem: 'precisando Garimpo',
-    estadoSolicitacao: 'pendente',
-    dataCriacao: '2026-10-22',
-    dataAtualizacao: '2026-10-22',
-  },
-  {
-    identificador: 'pedido-2',
-    candidatoIdentificador: 'estudante-uuid-2',
-    mentoriaIdentificador: 'mentor-1',
-    mensagem:
-      'Preciso de ajuda urgente para estruturar as rotas no frontend e a arquitetura MVC no backend.',
-    estadoSolicitacao: 'pendente',
-    dataCriacao: '2026-10-22',
-    dataAtualizacao: '2026-10-22',
-  },
-];
+interface SolicitacaoRecebidaApi {
+  id: number;
+  mentoriaId: number;
+  candidatoId: number;
+  estado: 'pendente' | 'aceite' | 'recusada' | 'cancelada';
+  dataCriacao: string;
+  mentoriaTitulo: string;
+  candidatoNome: string;
+  estadoPagamento: string | null;
+  valorPagamento: string | null;
+}
+
+type EstadoDecisao = 'aceite' | 'recusada';
 
 export function PainelMentor() {
   const navigate = useNavigate();
@@ -37,7 +28,7 @@ export function PainelMentor() {
   const utilizador: UtilizadorApi | null = (() => {
     try {
       const dados = localStorage.getItem('utilizador');
-      return dados ? (JSON.parse(dados) as UtilizadorApi) : null;
+      return dados ? JSON.parse(dados) as UtilizadorApi : null;
     } catch {
       return null;
     }
@@ -45,59 +36,153 @@ export function PainelMentor() {
 
   const nomeMentor = utilizador?.nomeCompleto || 'Mentor';
 
-  const [solicitacoes, setSolicitacoes] = useState<solicitacaoMentoria[]>(
-    MOCK_SOLICITACOES_INICIAIS
-  );
-
+  const [solicitacoes, setSolicitacoes] = useState<SolicitacaoRecebidaApi[]>([]);
   const [solicitacaoSelecionada, setSolicitacaoSelecionada] =
-    useState<solicitacaoMentoria | null>(null);
+    useState<SolicitacaoRecebidaApi | null>(null);
 
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
   const [mensagemResultado, setMensagemResultado] = useState('');
+  const [atualizandoId, setAtualizandoId] = useState<number | null>(null);
 
   const pedidosPendentes = solicitacoes.filter(
-    (pedido) => pedido.estadoSolicitacao === 'pendente'
+    (pedido) => pedido.estado === 'pendente'
   ).length;
 
-  function decidirPedido(
-    id: string,
-    novoEstado: 'aceite' | 'recusada'
-  ) {
-    setSolicitacoes((anteriores) =>
-      anteriores.map((pedido) =>
-        pedido.identificador === id
-          ? {
-              ...pedido,
-              estadoSolicitacao: novoEstado,
-              dataAtualizacao: new Date().toISOString().slice(0, 10),
-            }
-          : pedido
-      )
-    );
+  // Carrega somente as solicitações dirigidas às mentorias deste mentor.
+  async function carregarSolicitacoes() {
+    setErro('');
 
-    const pedidoAtualizado = solicitacoes.find(
-      (pedido) => pedido.identificador === id
-    );
+    try {
+      const resposta = await api.get<{
+        solicitacoes: SolicitacaoRecebidaApi[];
+      }>('/solicitacoesMentoria/recebidas');
 
-    if (pedidoAtualizado) {
-      setSolicitacaoSelecionada({
-        ...pedidoAtualizado,
-        estadoSolicitacao: novoEstado,
-        dataAtualizacao: new Date().toISOString().slice(0, 10),
-      });
+      setSolicitacoes(resposta.data.solicitacoes);
+    } catch (error) {
+      console.error('Erro ao carregar solicitações recebidas:', error);
+      setErro('Não foi possível carregar as solicitações recebidas.');
+    } finally {
+      setCarregando(false);
     }
+  }
 
-    setMensagemResultado(
-      novoEstado === 'aceite'
-        ? 'Solicitação aceite com sucesso.'
-        : 'Solicitação recusada.'
-    );
+  useEffect(() => {
+    void carregarSolicitacoes();
+  }, []);
 
-    console.log(`Pedido ${id} atualizado para o estado: ${novoEstado}`);
+  // Aceita ou recusa uma solicitação através do backend.
+  async function decidirPedido(
+    id: number,
+    novoEstado: EstadoDecisao
+  ) {
+    setErro('');
+    setMensagemResultado('');
+    setAtualizandoId(id);
+
+    try {
+      await api.patch(`/solicitacoesMentoria/${id}/estado`, {
+        estado: novoEstado,
+      });
+
+      const resposta = await api.get<{
+        solicitacoes: SolicitacaoRecebidaApi[];
+      }>('/solicitacoesMentoria/recebidas');
+
+      const atualizadas = resposta.data.solicitacoes;
+
+      setSolicitacoes(atualizadas);
+
+      const pedidoAtualizado = atualizadas.find(
+        (pedido) => pedido.id === id
+      );
+
+      setSolicitacaoSelecionada(pedidoAtualizado || null);
+
+      setMensagemResultado(
+        novoEstado === 'aceite'
+          ? 'Solicitação aceite com sucesso.'
+          : 'Solicitação recusada com sucesso.'
+      );
+    } catch (error) {
+      console.error('Erro ao atualizar solicitação:', error);
+      setErro(
+        'Não foi possível atualizar a solicitação. Verifique o estado do pedido e tente novamente.'
+      );
+    } finally {
+      setAtualizandoId(null);
+    }
   }
 
   function terminarSessaoMentor() {
     terminarSessao();
     navigate('/autenticacao', { replace: true });
+  }
+
+  function obterEstadoSolicitacao(estado: string) {
+    switch (estado) {
+      case 'pendente':
+        return {
+          texto: 'Pendente',
+          classe: 'text-amber-800 bg-amber-100',
+        };
+
+      case 'aceite':
+        return {
+          texto: 'Aceite',
+          classe: 'text-emerald-800 bg-emerald-100',
+        };
+
+      case 'recusada':
+        return {
+          texto: 'Recusada',
+          classe: 'text-red-800 bg-red-100',
+        };
+
+      case 'cancelada':
+        return {
+          texto: 'Cancelada',
+          classe: 'text-slate-600 bg-slate-100',
+        };
+
+      default:
+        return {
+          texto: estado,
+          classe: 'text-slate-600 bg-slate-100',
+        };
+    }
+  }
+
+  function obterEstadoPagamento(estado: string | null) {
+    switch (estado) {
+      case 'pendente':
+        return 'Pendente';
+
+      case 'confirmado':
+        return 'Confirmado';
+
+      case 'cancelado':
+        return 'Cancelado';
+
+      default:
+        return 'Não disponível';
+    }
+  }
+
+  function formatarData(data: string) {
+    const dataFormatada = new Date(data);
+
+    if (Number.isNaN(dataFormatada.getTime())) {
+      return 'Data não disponível';
+    }
+
+    return dataFormatada.toLocaleDateString('pt-PT', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   return (
@@ -107,17 +192,14 @@ export function PainelMentor() {
       <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-5 lg:px-8 min-h-[82px] flex flex-wrap items-center justify-between gap-4">
 
-          {/* LOGÓTIPO */}
           <a href="/" className="flex items-center gap-3">
             <img
-    src="/images/MentoriaBolsas_ Learn, Achieve, Realize.png"
-    alt="MentoriaBolsas — Aprenda. Conquiste. Realize."
-    className="h-14 w-auto max-w-[220px] object-contain"
-  />
-        
+              src="/images/MentoriaBolsas_ Learn, Achieve, Realize.png"
+              alt="MentoriaBolsas — Aprenda. Conquiste. Realize."
+              className="h-14 w-auto max-w-[220px] object-contain"
+            />
           </a>
 
-          {/* NAVEGAÇÃO */}
           <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-slate-600">
             <a
               href="/#inicio"
@@ -134,7 +216,7 @@ export function PainelMentor() {
             </a>
 
             <a
-              href="/#mentorias"
+              href="#"
               className="hover:text-[#0E7490] transition"
             >
               Mensagens
@@ -146,14 +228,12 @@ export function PainelMentor() {
             <button
               type="button"
               onClick={terminarSessaoMentor}
-              className="text-sm font-semibold text-red-600 border border-red-200 rounded-lg px-4 py-2 hover:bg-red-50 transition"
+              className="text-sm font-semibold text-red-600 rounded-lg px-4 py-2 transition"
             >
               Terminar Sessão
             </button>
 
-            <div className="  border-cyan-200 rounded-lg px-4 py-2">
-              
-
+            <div className="rounded-lg px-4 py-2">
               <span className="block text-sm font-bold text-[#164E63]">
                 {nomeMentor}
               </span>
@@ -167,22 +247,28 @@ export function PainelMentor() {
 
         {/* FAIXA DE ORIENTAÇÃO */}
         <section className="mb-8 rounded-2xl bg-[#164E63] text-white px-6 py-7 md:px-9 md:py-8 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">
-            Área do Mentor
-          </span>
 
-          <h1 className="mt-2 text-2xl md:text-3xl font-bold">
-            Mensagens de solicitação para o mentor
+          <h1 className="text-2xl md:text-3xl font-bold">
+            Gestão de solicitações de mentoria
           </h1>
 
-          <p className="mt-2 max-w-2xl text-sm md:text-base leading-relaxed text-cyan-50">
-            Consulte as mensagens recebidas dos candidatos, analise os seus
-            pedidos e decida se pretende aceitar ou recusar cada solicitação
-            de acompanhamento.
+          <p className="mt-3 max-w-2xl text-sm md:text-base leading-relaxed text-cyan-50">
+            Consulte os pedidos recebidos, conheça os candidatos interessados
+            nas suas mentorias e decida se pretende aceitar ou recusar cada
+            solicitação.
           </p>
+
+          <button
+            type="button"
+            onClick={() => navigate('/mentor/criar-mentoria')}
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-bold text-[#164E63] shadow-sm transition hover:bg-cyan-50 hover:shadow-md"
+          >
+            <span className="text-lg">+</span>
+            Criar nova mentoria
+          </button>
         </section>
 
-        {/* LISTA DE SOLICITAÇÕES E MENSAGEM */}
+        {/* LISTA DE SOLICITAÇÕES E DETALHES */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-7 items-start">
 
           {/* LISTA DE SOLICITANTES */}
@@ -204,30 +290,59 @@ export function PainelMentor() {
               </span>
             </div>
 
-            {solicitacoes.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => void carregarSolicitacoes()}
+              disabled={carregando || atualizandoId !== null}
+              className="mb-4 text-sm font-semibold text-[#0E7490] hover:underline disabled:opacity-50"
+            >
+              Atualizar solicitações
+            </button>
+
+            {carregando && (
+              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
+                A carregar solicitações...
+              </div>
+            )}
+
+            {!carregando && erro && (
+              <div
+                role="alert"
+                className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-5 text-sm mb-4"
+              >
+                {erro}
+              </div>
+            )}
+
+            {!carregando && !erro && solicitacoes.length === 0 && (
               <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
                 <p className="font-semibold text-slate-700">
                   Não existem solicitações recebidas.
                 </p>
 
                 <p className="text-sm text-slate-500 mt-2">
-                  Quando um candidato enviar um pedido, ele aparecerá aqui.
+                  Quando um candidato solicitar uma das suas mentorias,
+                  o pedido aparecerá aqui.
                 </p>
               </div>
-            ) : (
+            )}
+
+            {!carregando && solicitacoes.length > 0 && (
               <div className="space-y-3">
                 {solicitacoes.map((pedido) => {
                   const selecionado =
-                    solicitacaoSelecionada?.identificador ===
-                    pedido.identificador;
+                    solicitacaoSelecionada?.id === pedido.id;
+
+                  const estado = obterEstadoSolicitacao(pedido.estado);
 
                   return (
                     <button
                       type="button"
-                      key={pedido.identificador}
+                      key={pedido.id}
                       onClick={() => {
                         setSolicitacaoSelecionada(pedido);
                         setMensagemResultado('');
+                        setErro('');
                       }}
                       aria-pressed={selecionado}
                       className={`w-full text-left bg-white rounded-xl border p-4 transition-all duration-200 hover:shadow-md ${
@@ -242,37 +357,33 @@ export function PainelMentor() {
                             Candidato
                           </span>
 
-                          <span className="block text-sm font-bold text-slate-800 break-all">
-                            {pedido.candidatoIdentificador}
+                          <span className="block text-sm font-bold text-slate-800">
+                            {pedido.candidatoNome}
                           </span>
                         </div>
 
-                        {pedido.estadoSolicitacao === 'pendente' && (
-                          <span className="shrink-0 text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full">
-                            Pendente
-                          </span>
-                        )}
+                        <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${estado.classe}`}>
+                          {estado.texto}
+                        </span>
+                      </div>
 
-                        {pedido.estadoSolicitacao === 'aceite' && (
-                          <span className="shrink-0 text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
-                            Aceite
-                          </span>
-                        )}
+                      <div className="mt-3">
+                        <span className="block text-xs text-slate-400">
+                          Mentoria solicitada
+                        </span>
 
-                        {pedido.estadoSolicitacao === 'recusada' && (
-                          <span className="shrink-0 text-xs font-bold text-red-800 bg-red-100 px-2.5 py-1 rounded-full">
-                            Recusada
-                          </span>
-                        )}
+                        <span className="text-sm font-semibold text-[#164E63]">
+                          {pedido.mentoriaTitulo}
+                        </span>
                       </div>
 
                       <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center gap-2">
                         <span className="text-xs text-slate-500">
-                          Recebido: {pedido.dataCriacao}
+                          {formatarData(pedido.dataCriacao)}
                         </span>
 
                         <span className="text-xs font-bold text-[#0E7490]">
-                          {selecionado ? 'Selecionado ✓' : 'Ver mensagem →'}
+                          {selecionado ? 'Selecionado ✓' : 'Ver detalhes →'}
                         </span>
                       </div>
                     </button>
@@ -282,17 +393,17 @@ export function PainelMentor() {
             )}
           </section>
 
-          {/* PAINEL DA MENSAGEM */}
+          {/* PAINEL DE DETALHES */}
           <section className="lg:col-span-3">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-7 min-h-[350px]">
 
               <div className="mb-6">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#0E7490]">
-                  Comunicação com o candidato
+                  Gestão da solicitação
                 </span>
 
                 <h2 className="text-xl font-bold text-slate-800 mt-1">
-                  Mensagem recebida
+                  Detalhes do pedido
                 </h2>
               </div>
 
@@ -309,69 +420,126 @@ export function PainelMentor() {
                 <>
                   <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-4 mb-5">
                     <span className="block text-xs font-semibold text-slate-500">
-                      Mensagem enviada pelo candidato
+                      Candidato
                     </span>
 
-                    <p className="text-sm font-bold text-[#164E63] mt-1 break-all">
-                      {solicitacaoSelecionada.candidatoIdentificador}
+                    <p className="text-lg font-bold text-[#164E63] mt-1">
+                      {solicitacaoSelecionada.candidatoNome}
                     </p>
 
                     <p className="text-xs text-slate-500 mt-2">
-                      Data de recebimento: {solicitacaoSelecionada.dataCriacao}
+                      Pedido recebido em:{' '}
+                      {formatarData(solicitacaoSelecionada.dataCriacao)}
                     </p>
                   </div>
 
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 min-h-[150px]">
-                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {solicitacaoSelecionada.mensagem}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Mentoria solicitada
+                    </span>
+
+                    <h3 className="text-lg font-bold text-slate-800 mt-2">
+                      {solicitacaoSelecionada.mentoriaTitulo}
+                    </h3>
+
+                    <p className="text-xs text-slate-500 mt-2">
+                      Identificador da solicitação: #{solicitacaoSelecionada.id}
                     </p>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <span className="text-xs text-slate-500">
+                        Estado da solicitação
+                      </span>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {obterEstadoSolicitacao(
+                          solicitacaoSelecionada.estado
+                        ).texto}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <span className="text-xs text-slate-500">
+                        Estado do pagamento
+                      </span>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {obterEstadoPagamento(
+                          solicitacaoSelecionada.estadoPagamento
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4 sm:col-span-2">
+                      <span className="text-xs text-slate-500">
+                        Valor do pagamento
+                      </span>
+
+                      <p className="font-bold text-[#0E7490] mt-1">
+                        {solicitacaoSelecionada.valorPagamento !== null
+                          ? `${solicitacaoSelecionada.valorPagamento} Kz`
+                          : 'Não disponível'}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mt-6 pt-5 border-t border-slate-100">
 
-                    {solicitacaoSelecionada.estadoSolicitacao === 'pendente' ? (
+                    {solicitacaoSelecionada.estado === 'pendente' ? (
                       <>
                         <p className="text-sm text-slate-500 mb-4">
-                          Analise a mensagem e escolha uma das opções:
+                          Analise os dados do pedido e escolha uma das opções:
                         </p>
 
                         <div className="flex flex-wrap justify-end gap-3">
+
                           <button
                             type="button"
+                            disabled={atualizandoId !== null}
                             onClick={() =>
-                              decidirPedido(
-                                solicitacaoSelecionada.identificador,
+                              void decidirPedido(
+                                solicitacaoSelecionada.id,
                                 'recusada'
                               )
                             }
-                            className="px-5 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 transition"
+                            className="px-5 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 transition disabled:opacity-50"
                           >
-                            Recusar
+                            {atualizandoId === solicitacaoSelecionada.id
+                              ? 'A processar...'
+                              : 'Recusar'}
                           </button>
 
                           <button
                             type="button"
+                            disabled={atualizandoId !== null}
                             onClick={() =>
-                              decidirPedido(
-                                solicitacaoSelecionada.identificador,
+                              void decidirPedido(
+                                solicitacaoSelecionada.id,
                                 'aceite'
                               )
                             }
-                            className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition"
+                            className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50"
                           >
-                            Aceitar
+                            {atualizandoId === solicitacaoSelecionada.id
+                              ? 'A processar...'
+                              : 'Aceitar'}
                           </button>
                         </div>
                       </>
                     ) : (
-                      <div className="text-sm text-slate-600">
+                      <div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-4">
                         Esta solicitação já foi{' '}
                         <strong>
-                          {solicitacaoSelecionada.estadoSolicitacao === 'aceite'
+                          {solicitacaoSelecionada.estado === 'aceite'
                             ? 'aceite'
-                            : 'recusada'}
+                            : solicitacaoSelecionada.estado === 'recusada'
+                              ? 'recusada'
+                              : 'cancelada'}
                         </strong>
-                        .
+                        . Não é possível alterar novamente esta decisão.
                       </div>
                     )}
                   </div>
@@ -383,12 +551,12 @@ export function PainelMentor() {
                   </div>
 
                   <h3 className="font-bold text-slate-700">
-                    Nenhum candidato selecionado
+                    Nenhuma solicitação selecionada
                   </h3>
 
                   <p className="text-sm text-slate-500 mt-2 max-w-sm leading-relaxed">
                     Selecione um candidato da lista à esquerda para consultar
-                    a mensagem que enviou e decidir sobre a solicitação.
+                    os detalhes do pedido e decidir sobre a solicitação.
                   </p>
                 </div>
               )}
